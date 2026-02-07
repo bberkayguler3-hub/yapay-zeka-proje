@@ -2,79 +2,95 @@ import google.generativeai as genai
 import streamlit as st
 import pandas as pd
 
-# --- 1. GÜVENLİK VE AYARLAR ---
+# --- 1. GÜVENLİK AYARI ---
 try:
-    # Streamlit Cloud'da "Secrets" kısmına GEMINI_API_KEY olarak eklemelisin
     API_KEY = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=API_KEY)
     model = genai.GenerativeModel('gemini-pro')
 except Exception as e:
-    st.error("⚠️ API Anahtarı eksik! Secrets ayarlarını yapana kadar AI çalışmayacaktır.")
+    st.error("⚠️ API Anahtarı eksik! Lütfen Secrets ayarlarına GEMINI_API_KEY ekleyin.")
 
-# --- 2. SAYFA AYARLARI ---
-st.set_page_config(page_title="Berkay Emlak & İnşaat Pro", layout="wide")
+# --- 2. SAYFA TASARIMI ---
+st.set_page_config(page_title="Müteahhit ERP Sistemi", layout="wide", page_icon="🏗️")
 
-# Menü Seçenekleri
-menu = ["🏠 İlan Oluşturucu (AI)", "🏗️ İnşaat Bütçe Takibi (20M)"]
-choice = st.sidebar.selectbox("Modül Seçin", menu)
+st.sidebar.title("🏗️ Şantiye Yönetimi")
+menu = st.sidebar.radio("Menü", ["Finans & Bütçe", "AI İlan Yazarı", "Malzeme Analizi"])
 
-# --- 3. MODÜL 1: AI İLAN OLUŞTURUCU ---
-if choice == "🏠 İlan Oluşturucu (AI)":
-    st.title("🏠 Profesyonel İlan Robotu")
-    st.info("Emlakçı diliyle etkileyici ilanlar hazırlar.")
+# --- 3. VERİ SAKLAMA (Session State) ---
+if 'harcamalar' not in st.session_state:
+    st.session_state.harcamalar = []
+
+# --- 4. FİNANS & BÜTÇE MODÜLÜ ---
+if menu == "Finans & Bütçe":
+    st.title("🏗️ Dinamik İnşaat Finans Yönetimi")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        mevki = st.text_input("Konum", placeholder="Örn: Beşiktaş")
-        oda = st.selectbox("Oda", ["1+1", "2+1", "3+1", "Villa"])
-        fiyat = st.text_input("Satış Fiyatı (TL)")
-    with col2:
-        ozellikler = st.text_area("Öne Çıkanlar", "Lüks mutfak, yerden ısıtma, akıllı ev...")
+    # BÜTÇE AYARI - Burayı istediğin gibi değiştirebilirsin
+    st.sidebar.subheader("⚙️ Proje Ayarları")
+    toplam_butce = st.sidebar.number_input("Toplam Proje Bütçesi (TL)", min_value=0, value=20000000, step=1000000)
+    proje_adi = st.sidebar.text_input("Proje Adı", value="Lüks Konut Projesi")
 
-    if st.button("✨ İlanı Yazdır"):
-        if mevki and ozellikler:
-            with st.spinner('Yapay zeka metni dokuyor...'):
-                prompt = f"Şu ev için profesyonel ilan yaz: Konum:{mevki}, Oda:{oda}, Fiyat:{fiyat}, Özellikler:{ozellikler}"
-                response = model.generate_content(prompt)
-                st.success("İlan Hazır!")
-                st.write(response.text)
-        else:
-            st.warning("Lütfen bilgileri eksiksiz girin.")
+    st.subheader(f"📊 {proje_adi} - Finansal Özet")
+    
+    # Hesaplamalar
+    df = pd.DataFrame(st.session_state.harcamalar) if st.session_state.harcamalar else pd.DataFrame(columns=["Kalem", "Tutar", "Tarih"])
+    toplam_harcanan = df["Tutar"].sum() if not df.empty else 0
+    kalan_para = toplam_butce - toplam_harcanan
+    
+    # Yüzde hesaplama (Sıfıra bölünme hatası engellendi)
+    harcama_yuzdesi = (toplam_harcanan / toplam_butce * 100) if toplam_butce > 0 else 0
 
-# --- 4. MODÜL 2: İNŞAAT BÜTÇE TAKİBİ ---
-elif choice == "🏗️ İnşaat Bütçe Takibi (20)":
-    st.title("🏗️ 20 Milyon TL İnşaat Yönetimi")
-    st.markdown("---")
-    
-    # Sabit Bütçe
-    toplam_butce = 20000000
-    
-    st.subheader("💰 Harcama Girişi")
+    # Üst Bilgi Kartları
     c1, c2, c3 = st.columns(3)
-    kalem = c1.selectbox("Masraf Kalemi", ["Arsa", "Kaba İnşaat (Demir-Beton)", "İnce İşler", "Ruhsat/Resmi", "Diğer"])
-    tutar = c2.number_input("Tutar (TL)", min_value=0, step=10000)
+    c1.metric("Toplam Hedef Bütçe", f"{toplam_butce:,.0f} TL")
+    c2.metric("Toplam Harcanan", f"{toplam_harcanan:,.0f} TL", delta=f"{harcama_yuzdesi:.1f}%")
+    c3.metric("Kalan Nakit", f"{kalan_para:,.0f} TL", delta_color="normal")
+
+    st.progress(min(harcama_yuzdesi / 100, 1.0))
+
+    st.markdown("---")
+
+    # Giriş Alanı
+    st.subheader("➕ Yeni Gider Kaydı")
+    with st.container():
+        col1, col2, col3 = st.columns([2, 2, 1])
+        kalem = col1.selectbox("Gider Kategorisi", ["Arsa/Arazi", "Hafriyat", "Beton & Demir", "İşçilik", "Tesisat", "Peyzaj", "Resmi Harçlar", "Diğer"])
+        tutar = col2.number_input("Tutar (TL)", min_value=0, step=1000)
+        
+        if col3.button("Sisteme İşle"):
+            st.session_state.harcamalar.append({"Kalem": kalem, "Tutar": tutar})
+            st.rerun()
+
+    # Veri Görselleştirme
+    if not df.empty:
+        col_sol, col_sag = st.columns([3, 2])
+        with col_sol:
+            st.subheader("📉 Harcama Grafiği")
+            st.bar_chart(df.groupby("Kalem")["Tutar"].sum())
+        with col_sag:
+            st.subheader("📋 Gider Detayları")
+            st.dataframe(df, use_container_width=True)
+            if st.button("Listeyi Temizle"):
+                st.session_state.harcamalar = []
+                st.rerun()
+
+# --- 5. AI İLAN YAZARI (ÖNCEKİ KODUN ENTEGRE HALİ) ---
+elif menu == "AI İlan Yazarı":
+    st.title("🏠 AI Emlak Pazarlama Robotu")
+    mevki = st.text_input("Konum", placeholder="Örn: Kadıköy")
+    ozellik = st.text_area("Öne Çıkan Özellikler", "Akıllı ev sistemi, geniş teras...")
     
-    # Basit bir session state ile verileri tutalım (Site açık kaldığı sürece)
-    if 'harcamalar' not in st.session_state:
-        st.session_state.harcamalar = []
+    if st.button("✨ Profesyonel İlan Hazırla"):
+        if mevki and ozellik:
+            with st.spinner('AI metni hazırlıyor...'):
+                res = model.generate_content(f"Müteahhit ağzıyla bir ilan yaz. Yer: {mevki}, Özellikler: {ozellik}")
+                st.markdown(res.text)
 
-    if c3.button("➕ Harcamayı Ekle"):
-        st.session_state.harcamalar.append({"Kalem": kalem, "Tutar": tutar})
-        st.toast("Harcama kaydedildi!")
-
-    # Tablo ve Hesaplama
-    if st.session_state.harcamalar:
-        df = pd.DataFrame(st.session_state.harcamalar)
-        toplam_harcanan = df["Tutar"].sum()
-        kalan_para = toplam_butce - toplam_harcanan
-        
-        # Göstergeler
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Toplam Bütçe", f"{toplam_butce:,.0f} TL")
-        m2.metric("Harcanan", f"{toplam_harcanan:,.0f} TL", delta=f"-{toplam_harcanan:,.0f}", delta_color="inverse")
-        m3.metric("Kalan Limit", f"{kalan_para:,.0f} TL")
-        
-        st.progress(min(toplam_harcanan / toplam_butce, 1.0))
-        st.dataframe(df, use_container_width=True)
-    else:
-        st.info("Henüz harcama girilmedi. Bütçen pırıl pırıl 20 milyon TL!")
+# --- 6. MALZEME ANALİZİ ---
+elif menu == "Malzeme Analizi":
+    st.title("📉 Maliyet ve Malzeme Analisti")
+    st.write("Müteahhit asistanına piyasa hakkında soru sor.")
+    soru = st.text_input("Soru", placeholder="Örn: 100 dairelik proje için ortalama kaç ton demir gider?")
+    if st.button("AI'ya Danış"):
+        with st.spinner("Hesaplanıyor..."):
+            res = model.generate_content(f"Bir inşaat mühendisi gibi cevap ver: {soru}")
+            st.info(res.text)
