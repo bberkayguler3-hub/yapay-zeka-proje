@@ -2,13 +2,13 @@ import google.generativeai as genai
 import streamlit as st
 import pandas as pd
 
-# --- 1. MODEL AYARI (EN GÜNCEL VERSİYON) ---
+# --- 1. MODEL AYARI (HATA ALMAYAN VERSİYON) ---
 try:
     API_KEY = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=API_KEY)
     
-    # 'gemini-1.5-flash-latest' en garantisidir, v1beta hatasını çözer.
-    model = genai.GenerativeModel('gemini-1.5-flash-latest')
+    # 404 hatasını önlemek için en stabil model ismi:
+    model = genai.GenerativeModel('gemini-1.5-flash')
 except Exception as e:
     st.error(f"⚠️ Kurulum Hatası: {e}")
 
@@ -24,7 +24,6 @@ if 'harcamalar' not in st.session_state:
 # --- 3. MODÜL: FİNANS & BÜTÇE ---
 if menu == "📊 Finans & Bütçe":
     st.title("💰 İnşaat Finans Takip Sistemi")
-    
     toplam_butce = st.sidebar.number_input("Hedef Bütçe (TL)", min_value=1, value=20000000)
     
     df = pd.DataFrame(st.session_state.harcamalar) if st.session_state.harcamalar else pd.DataFrame(columns=["Kalem", "Tutar"])
@@ -57,12 +56,12 @@ elif menu == "🏠 AI İlan Robotu":
     if st.button("✨ Oluştur"):
         if konum and ozellik:
             with st.spinner('AI Yanıtlıyor...'):
-                # Hata ihtimaline karşı try-except bloğu
                 try:
+                    # 'models/' takısı eklemeden, doğrudan ismiyle çağırıyoruz
                     res = model.generate_content(f"Müteahhit ağzıyla ilan yaz. Yer: {konum}, Özellikler: {ozellik}")
                     st.write(res.text)
                 except Exception as e:
-                    st.error(f"Yapay zeka şu an meşgul, lütfen tekrar dene. Hata: {e}")
+                    st.error(f"Yapay zeka hatası: {e}")
 
 # --- 5. MODÜL: MALZEME ANALİZİ ---
 elif menu == "🔍 Malzeme Analizi":
